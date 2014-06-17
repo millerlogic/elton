@@ -1,5 +1,5 @@
 -- Copyright 2012-2014 Christopher E. Miller
--- License: Boost Software License - Version 1.0
+-- Dual License (choose): MIT License 1.0 / Boost Software License 1.0
 -- http://www.boost.org/users/license.html
 
 
@@ -80,7 +80,6 @@ function serialize(obj, file)
 		needclose = true
 	end
 
-	file:write("\n-- serializer 8906\n")
 	for k, v in pairs(obj) do
 		entry(k, v, 0, file)
 	end

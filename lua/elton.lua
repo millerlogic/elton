@@ -1,4 +1,4 @@
--- Copyright 2012-2014 Christopher E. Miller
+-- Copyright 2012-2014 Christopher E. Miller, Anders Bergh
 -- Dual License (choose): MIT License 1.0 / Boost Software License 1.0
 -- http://www.boost.org/users/license.html
 
@@ -100,15 +100,39 @@ end
 
 
 local function loadfunc(ld, name, env)
+	local fn
 	if _VERSION == "Lua 5.1" then
 		local a, b = load(ld, name)
 		if not a then
 			return a, b
 		end
 		setfenv(a, env)
-		return a
+		fn = a
 	elseif _VERSION >= "Lua 5.2" then
-		return load(ld, name, "t", env)
+		local a, b = load(ld, name, "t", env)
+		if not a then
+			return a, b
+		end
+		fn = a
+	end
+	-- return fn
+	local co, coerr = coroutine.create(fn)
+	if not co then
+		return co, coerr
+	end
+	local callcounter = 0
+	debug.sethook(co, function()
+		callcounter = callcounter + 1
+		if callcounter > 1 then
+			error("Function call not allowed")
+		end
+	end, "c")
+	return function()
+		local x = { coroutine.resume(co) }
+		if not x[1] then
+			return x[1], x[2]
+		end
+		return (table.unpack or unpack)(x, 2)
 	end
 end
 
@@ -174,6 +198,9 @@ local function deserializer(source, isLiteral)
 		setmetatable(b, a)
 		a, b = b, nil
 	end
+	if not a then
+		return a, b
+	end
 	assert(type(a) == "table", "Table expected")
 	return a
 end
@@ -191,10 +218,10 @@ function M.parse(data)
 end
 
 
---[[
+-- [[
 local function serializer_Test()
 	local t = { 33, hello = 3, [99] = 99, ["list!"] = { 5, 4, 3, 2, 1 },
-		["x*x"] = "x\"'''\n", mybool = true, ["your-bool"] = false }
+		["x*x"] = "x\"'''\n", mybool = true, ["your-bool"] = false, }
 	local s = assert(M.stringify(t))
 	print("serialize = `" .. s .. "`")
 	local t2 = assert(M.parse(s))
@@ -203,6 +230,10 @@ local function serializer_Test()
 			assert(t2[k] == v)
 		end
 	end
+	
+	-- Disallow function call:
+	assert(not M.parse("{ (function() end)() }"), "Function call was allowed")
+	
 	print("serializer_Test PASS")
 end
 

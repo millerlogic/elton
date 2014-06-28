@@ -218,8 +218,9 @@ function M.parse(data)
 end
 
 
--- [[
-local function serializer_Test()
+if unittest then
+	-- lua -e unittest=true elton.lua
+	
 	local t = { 33, hello = 3, [99] = 99, ["list!"] = { 5, 4, 3, 2, 1 },
 		["x*x"] = "x\"'''\n", mybool = true, ["your-bool"] = false, }
 	local s = assert(M.stringify(t))
@@ -234,11 +235,8 @@ local function serializer_Test()
 	-- Disallow function call:
 	assert(not M.parse("{ (function() end)() }"), "Function call was allowed")
 	
-	print("serializer_Test PASS")
+	print("elton_Test PASS")
 end
-
-serializer_Test() -- Run test.
---]]
 
 
 return M

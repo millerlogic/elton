@@ -7,53 +7,103 @@ local M = {}
 
 local entry -- forward decl
 
+local function tablefields(v, level, file)
+	local maxarrayindex = 0
+	-- Try array:
+	while true do
+		local i = maxarrayindex + 1
+		local v2 = v[i]
+		if v2 then
+			entry(nil, v2, level + 1, file)
+			maxarrayindex = i
+		else
+			break
+		end
+	end
+	-- Now non-array:
+	for k2, v2 in pairs(v) do
+		entry(k2, v2, level + 1, file, maxarrayindex)
+	end
+end
+
 local function entrytable(k, v, level, file)
 	local ktype = type(k)
 	file:write(string.rep("\t", level))
 	if ktype == "number" then
 		file:write("[", k, "]={\n")
 	elseif ktype == "string" then
-		file:write(string.format("[%q]={\n", k))
+		if k:find("^%a[%a%d_]*$") then
+			file:write(string.format("%s={\n", k))
+		else
+			file:write(string.format("[%q]={\n", k))
+		end
+	elseif ktype == "boolean" then
+		file:write(string.format("[%s]={\n", tostring(k)))
+	else
+		assert(false, "Type '" .. ktype .. "' not allowed")
 	end
-	for k2, v2 in pairs(v) do
-		entry(k2, v2, level + 1, file)
-	end
+	tablefields(v, level, file)
 	file:write(string.rep("\t", level))
 	file:write("},\n")
 end
 
-function entry(k, v, level, file)
+function entry(k, v, level, file, maxarrayindex)
 	local ktype, vtype = type(k), type(v)
 	if vtype == "table" then
 		entrytable(k, v, level, file)
 	else
-		file:write(string.rep("\t", level))
+		local indent = string.rep("\t", level)
 		if ktype == "number" then
-			if vtype == "number" then
-				file:write("[", k, "]=", v, ",\n")
-			elseif vtype == "string" then
-				file:write(string.format("[%s]=%q,\n", k, v))
-			elseif vtype == "boolean" then
-				file:write(string.format("[%s]=%s,\n", k, tostring(v)))
+			if k > maxarrayindex or math.floor(k) ~= k then
+				if vtype == "number" then
+					file:write(indent, "[", k, "]=", v, ",\n")
+				elseif vtype == "string" then
+					file:write(indent, string.format("[%s]=%q,\n", k, v))
+				elseif vtype == "boolean" then
+					file:write(indent, string.format("[%s]=%s,\n", k, tostring(v)))
+				end
+			else
+				-- Array index already written.
 			end
 		elseif ktype == "string" then
 			if k:find("^%a[%a%d_]*$") then
 				if vtype == "number" then
-					file:write(k, "=", v, ",\n")
+					file:write(indent, k, "=", v, ",\n")
 				elseif vtype == "string" then
-					file:write(string.format("%s=%q,\n", k, v))
+					file:write(indent, string.format("%s=%q,\n", k, v))
 				elseif vtype == "boolean" then
-					file:write(string.format("%s=%s,\n", k, tostring(v)))
+					file:write(indent, string.format("%s=%s,\n", k, tostring(v)))
 				end
 			else
 				if vtype == "number" then
-					file:write(string.format("[%q]=%s,\n", k, v))
+					file:write(indent, string.format("[%q]=%s,\n", k, v))
 				elseif vtype == "string" then
-					file:write(string.format("[%q]=%q,\n", k, v))
+					file:write(indent, string.format("[%q]=%q,\n", k, v))
 				elseif vtype == "boolean" then
-					file:write(string.format("[%q]=%s,\n", k, tostring(v)))
+					file:write(indent, string.format("[%q]=%s,\n", k, tostring(v)))
+				else
+					assert(false, "Type '" .. vtype .. "' not allowed")
 				end
 			end
+		elseif ktype == "boolean" then
+			if vtype == "number" then
+				file:write("[", tostring(k), "]=", v, ",\n")
+			elseif vtype == "string" then
+				file:write(string.format("[%s]=%q,\n", tostring(k), v))
+			elseif vtype == "boolean" then
+				file:write(string.format("[%s]=%s,\n", tostring(k), tostring(v)))
+			end
+		elseif ktype == "nil" then
+			-- nil key used for array portion of a table.
+			if vtype == "number" then
+				file:write(indent, v, ",\n")
+			elseif vtype == "string" then
+				file:write(indent, string.format("%q,\n", v))
+			elseif vtype == "boolean" then
+				file:write(indent, string.format("%s,\n", tostring(v)))
+			end
+		else
+			assert(false, "Type '" .. ktype .. "' not allowed")
 		end
 	end
 end
@@ -71,9 +121,7 @@ function M.serialize(obj, file)
 		needclose = true
 	end
 
-	for k, v in pairs(obj) do
-		entry(k, v, 0, file)
-	end
+	tablefields(obj, 0, file)
 
 	if isstr then return file.str end
 	if needclose then file:close() end
@@ -141,7 +189,7 @@ local function validate(obj)
 	for k, v in pairs(obj) do
 		local kt = type(k)
 		local vt = type(v)
-		assert(kt ~= "function" and vt ~= "function", "Function not allowed")
+		assert(kt ~= "function" and vt ~= "function", "Type 'function' not allowed")
 		if kt == "table" then
 			validate(v)
 		end
@@ -222,13 +270,15 @@ if unittest then
 	-- lua -e unittest=true elton.lua
 	
 	local t = { 33, hello = 3, [99] = 99, ["list!"] = { 5, 4, 3, 2, 1 },
-		["x*x"] = "x\"'''\n", mybool = true, ["your-bool"] = false, }
+		["x*x"] = "x\"'''\n", mybool = true, ["your-bool"] = false,
+		[true] = false, foo = { 'first', 2, true, false, { mytable=1 }, [101] = 202, }
+	}
 	local s = assert(M.stringify(t))
 	print("serialize = `" .. s .. "`")
 	local t2 = assert(M.parse(s))
 	for k, v in pairs(t) do
 		if type(v) ~= "table" then
-			assert(t2[k] == v)
+			assert(t2[k] == v, "Mismatch: `" .. tostring(t2[k]) .. "` vs `" .. tostring(v) .. "`")
 		end
 	end
 	

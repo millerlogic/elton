@@ -285,6 +285,13 @@ if unittest then
 	-- Disallow function call:
 	assert(not M.parse("{ (function() end)() }"), "Function call was allowed")
 	
+	-- Disallow cycles:
+	t["list!"].cycle = t
+	-- assert(not M.stringify(t))
+	-- Note: implicitly handled by stack overflow, which can be recovered via pcall.
+	assert(not pcall(M.stringify, t))
+	t["list!"].cycle = nil
+	
 	print("elton_Test PASS")
 end
 

@@ -3,7 +3,7 @@ package.path = package.path..";../?.lua"
 
 local elton = require "elton"
 
-local serialized = elton.serialize {
+local serialized = elton.stringify {
     date = "2014-03-14 13:32",
     title = "An example Elton document",
     tags = {"test", "example"},

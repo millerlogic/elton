@@ -121,7 +121,9 @@ function M.serialize(obj, file)
 		needclose = true
 	end
 
+	file:write("{\n")
 	tablefields(obj, 0, file)
+	file:write("}\n")
 
 	if isstr then return file.str end
 	if needclose then file:close() end
@@ -220,10 +222,10 @@ local function deserializer(source, isLiteral)
 	local fn, xerr = loadfunc(function()
 		if state == 0 then
 			state = 1
-			return "return {\n"
+			return "return "
 		elseif state == 1 then
 			if isLiteral then
-				state = 2
+				state = -1
 				return source
 			end
 			local rr = file:read(4096)
@@ -231,11 +233,6 @@ local function deserializer(source, isLiteral)
 				return rr
 			end
 			state = -1
-			return "\n}"
-		elseif state == 2 then
-			-- For isLiteral only.
-			state = -1
-			return "\n}"
 		end
 	end, "deserialize-" .. name, env)
 	if needclose then file:close() end
